@@ -1,0 +1,37 @@
+#!/bin/bash
+
+obj=obj
+name=H2OUVE-UserManual
+pandocglobal=(
+	--defaults=config/style.yml
+)
+pandocargs=(
+	${pandocglobal[@]}
+	--defaults=config/mainpage.yml
+)
+
+src=(
+	page/History.md
+	page/Feature.md
+	page/console/*
+	page/graphic/*
+	page/Annex.md
+)
+
+while true
+do
+	case $1 in
+		-d)
+			pandocargs+=(--verbose)
+			;;
+	esac
+	shift
+	[ -z "$1" ] && break
+done
+
+mkdir -p obj
+pandoc page/Header.md -o obj/Header.html ${pandocglobal[@]} &&\
+pandoc ${src[@]} ${pandocargs[@]}
+retn=$?
+rm -fr obj
+exit $retn

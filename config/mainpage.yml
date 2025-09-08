@@ -1,0 +1,20 @@
+# 頂層輸入輸出設定，一定要擺上面
+output-file: H2OUVE-UserManual.pdf
+
+standalone: true
+toc: true
+include-before-body:
+    - obj/Header.html
+variables:
+    toc-title: "Table of Content"
+    title-block: false
+    pagetitle: "H2OUVE UserManual"
+
+
+pdf-engine: wkhtmltopdf
+pdf-engine-opts:
+    - "--enable-local-file-access"
+    - "--footer-center"
+    - "[page]"
+    - "--footer-font-size"
+    - "8"

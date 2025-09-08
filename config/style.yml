@@ -1,0 +1,7 @@
+
+css: style/style.css
+variables:
+  margin-top: 15
+  margin-bottom: 15
+  margin-left: 10
+  margin-right: 10
