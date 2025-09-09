@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | 0.1 | 2025/09/09 | Initial version |
 | 0.2 | 2025/09/08 | Added assumptions, extended STRIDE threats, improved mitigations, added residual risk and validation steps |
+| 0.3 | 2025/09/09 | Expanded PR/CI Checklist with comprehensive security controls for C#/.NET, Node.js/Express, and general CI/CD practices |
 
 ## 1. Overview and Scope
 
@@ -161,14 +162,128 @@ app.listen(3000);
 
 ## PR / CI Checklist
 
-**C# / .NET**
-- [ ] DPAPI [I-01] used for encryption with `ProtectedData`
-- [ ] No hardcoded `SecurityProtocol` [S-01/T-03] or `SslProtocols`
-- [ ] EventSource [R-01] masks sensitive fields
-- [ ] `/GS`, `/guard:cf`, `/DYNAMICBASE`, `/HIGHENTROPYVA` enabled [E-01]; BinSkim passed
-- [ ] DevSkim [general detection] shows no High severity rules
+### **C# / .NET Security Checklist**
+**Data Protection & Encryption [I-01, I-02]**
+- [ ] DPAPI used for encryption with `ProtectedData.Protect/Unprotect`
+- [ ] Sensitive strings use `SecureString` class where possible
+- [ ] Memory buffers cleared after use (`Array.Clear`, `GC.Collect`)
+- [ ] No hardcoded secrets, API keys, or connection strings in source code
+- [ ] Configuration secrets use User Secrets or Azure Key Vault
 
-**Node / Express**
-- [ ] TLS 1.2+/TLS 1.3 enforced [S-01/T-03]
-- [ ] `helmet()` and CSP used [T-01/I-03]; secure cookie settings applied
-- [ ] Logs mask sensitive data [I-03]
+**Network Security [S-01, T-03]**
+- [ ] No hardcoded `SecurityProtocol` or `SslProtocols` (let .NET negotiate)
+- [ ] Certificate validation enabled and certificate pinning implemented
+- [ ] HTTPS-only communication enforced
+- [ ] HttpClient configured with appropriate timeout values
+- [ ] Custom certificate validation logic reviewed and tested
+
+**Logging & Auditing [R-01, I-03]**
+- [ ] EventSource or structured logging (Serilog/NLog) implemented
+- [ ] Sensitive fields masked in logs (passwords, tokens, PII)
+- [ ] Log levels appropriately configured (no Debug logs in production)
+- [ ] Log injection vulnerabilities prevented (input sanitization)
+
+**Binary Security [E-01, T-01]**
+- [ ] Security compiler flags enabled: `/GS`, `/guard:cf`, `/DYNAMICBASE`, `/HIGHENTROPYVA`
+- [ ] BinSkim analysis passed without High severity findings
+- [ ] Code signing certificates applied to all executables and DLLs
+- [ ] Strong name signing enabled for assemblies
+- [ ] ASLR and DEP enabled in linker options
+
+**Input Validation & Parsing [D-01, D-02]**
+- [ ] File size and type validation implemented
+- [ ] Regex patterns reviewed for ReDoS vulnerabilities
+- [ ] Input sanitization for all user-provided data
+- [ ] XML/JSON parsers configured to prevent XXE and deserialization attacks
+- [ ] SQL injection prevention (parameterized queries/ORM)
+
+**Static Analysis & Dependencies**
+- [ ] DevSkim shows no High/Critical severity findings
+- [ ] SonarQube/CodeQL analysis passed
+- [ ] NuGet packages audited with `dotnet list package --vulnerable`
+- [ ] Dependency versions pinned and regularly updated
+- [ ] No known vulnerable packages in dependency tree
+
+**Access Control & Privileges [E-01, E-02]**
+- [ ] Application runs with minimal required privileges
+- [ ] UAC prompts only when absolutely necessary
+- [ ] File system permissions follow principle of least privilege
+- [ ] Registry access minimized and validated
+- [ ] DLL loading uses secure methods (SetDefaultDllDirectories, full paths)
+
+### **Node.js / Express Security Checklist**
+**Network & Transport Security [S-01, T-03]**
+- [ ] TLS 1.2+ enforced (`minVersion: 'TLSv1.2'` in HTTPS options)
+- [ ] Certificate validation and pinning implemented
+- [ ] HSTS headers configured with appropriate max-age
+- [ ] Certificate transparency monitoring enabled
+- [ ] Request timeout and rate limiting configured
+
+**HTTP Security Headers [T-01, I-03]**
+- [ ] `helmet()` middleware configured with secure defaults
+- [ ] Content Security Policy (CSP) implemented and tested
+- [ ] Secure cookie settings: `Secure`, `HttpOnly`, `SameSite`
+- [ ] X-Frame-Options, X-Content-Type-Options headers set
+- [ ] Referrer-Policy configured appropriately
+
+**Authentication & Session Management [S-02, I-01]**
+- [ ] JWT tokens properly validated and signed
+- [ ] Session secrets stored securely (environment variables/secrets manager)
+- [ ] Token expiration and refresh mechanisms implemented
+- [ ] CSRF protection enabled for state-changing operations
+- [ ] Authentication rate limiting implemented
+
+**Input Validation & Sanitization [D-01, D-02, T-02]**
+- [ ] Request body size limits configured
+- [ ] File upload restrictions (type, size, location)
+- [ ] Input validation middleware (Joi, express-validator)
+- [ ] SQL injection prevention (parameterized queries)
+- [ ] XSS protection and output encoding
+
+**Logging & Monitoring [R-01, I-03]**
+- [ ] Structured logging implemented (Winston, Bunyan)
+- [ ] Sensitive data masked in logs (Authorization headers, passwords)
+- [ ] Security events logged (failed logins, privilege escalations)
+- [ ] Log rotation and secure storage configured
+- [ ] Monitoring and alerting for security events
+
+**Dependencies & Static Analysis**
+- [ ] `npm audit` shows no High/Critical vulnerabilities
+- [ ] Package versions pinned in package-lock.json
+- [ ] ESLint security rules enabled (eslint-plugin-security)
+- [ ] Snyk or similar dependency scanning in CI pipeline
+- [ ] Regular dependency updates scheduled
+
+**Environment & Deployment [E-01, E-02]**
+- [ ] Environment variables used for all configuration
+- [ ] Production mode enabled (`NODE_ENV=production`)
+- [ ] Debug information disabled in production builds
+- [ ] Source maps excluded from production deployments
+- [ ] Docker images use non-root user and minimal base images
+
+### **General CI/CD Security Checklist**
+**Build Pipeline Security**
+- [ ] Secrets stored in secure CI/CD variables (encrypted)
+- [ ] Build artifacts signed and integrity-verified
+- [ ] Container images scanned for vulnerabilities
+- [ ] Infrastructure as Code (IaC) security scanned
+- [ ] SAST (Static Application Security Testing) integrated
+
+**Release Management**
+- [ ] Security testing included in pipeline (DAST, penetration testing)
+- [ ] Code review required for all security-related changes
+- [ ] Automated security regression testing
+- [ ] Rollback procedures documented and tested
+- [ ] Security incident response plan validated
+
+**Monitoring & Compliance**
+- [ ] Security metrics and KPIs defined and tracked
+- [ ] Compliance requirements validated (if applicable)
+- [ ] Security documentation updated
+- [ ] Threat model review completed for significant changes
+- [ ] Security training completed for development team
+
+### **Priority Levels**
+- **🔴 Critical (Must Fix)**: High severity security findings that block release
+- **🟡 High Priority**: Security improvements that should be addressed soon
+- **🟢 Nice to Have**: Security enhancements for future consideration
