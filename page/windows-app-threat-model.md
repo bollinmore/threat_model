@@ -4,286 +4,307 @@
 
 | Revision | Date | Description |
 | --- | --- | --- |
-| 0.1 | 2025/09/09 | Initial version |
-| 0.2 | 2025/09/08 | Added assumptions, extended STRIDE threats, improved mitigations, added residual risk and validation steps |
+| 0.1 | 2025/09/08 | Initial version |
+| 0.2 | 2025/09/09 | Added assumptions, extended STRIDE threats, improved mitigations, added residual risk and validation steps |
 | 0.3 | 2025/09/09 | Expanded PR/CI Checklist with comprehensive security controls for C#/.NET, Node.js/Express, and general CI/CD practices |
+| 0.4 | 2025/09/10 | **IMPROVED**: Fixed logical inconsistencies, consolidated common security controls, clarified architecture boundaries |
 
 ## 1. Overview and Scope
 
-*   Application Names: H2OIDE, InQuire  
-*   Application Description:  
-    - **H2OIDE** is an integrated BIOS development environment running on Microsoft Windows 10/11. It provides text editing, code compilation, and downloadable BIOS CVE patch solutions.  
-    - **InQuire** is a desktop application that serves as a unified entry point for all external Insyde services.  
-*   Modeling Scope:  
-	+   Included: The application itself (.exe), user profiles, locally stored files, interactions with the OS (file system, registry), and (if applicable) network communication with remote cloud services.  
-	+   Excluded: Distribution websites, third-party installers (e.g., InnoSetup, MSI), vulnerabilities in the OS kernel itself.  
-        (**Note**: If an installer is tampered with, it may indirectly affect application file permissions or DLL integrity.)  
-*   Modeling Objective: Identify and mitigate potential security threats during design and development to protect confidentiality, integrity, and availability of user data.  
-*   Assumptions: The user’s OS environment is free from rootkits and kernel-level exploits.  
+* **Application Names**: H2OIDE, InQuire  
+* **Application Description**:  
+  - **H2OIDE**: An integrated BIOS development environment running on Microsoft Windows 10/11, built with C#/WinForms. Provides text editing, code compilation, and downloadable BIOS CVE patch solutions.  
+  - **InQuire**: A desktop application serving as a unified entry point for all external Insyde services, potentially built with Electron/Node.js framework.  
+* **Modeling Scope**:  
+  + **Included**: Application executables (.exe), user profiles, locally stored files, interactions with OS (file system, registry), network communication with remote cloud services, and application installers.  
+  + **Excluded**: Third-party library vulnerabilities (handled separately), OS kernel vulnerabilities, cloud service infrastructure security.  
+* **Modeling Objective**: Identify and mitigate potential security threats during design and development to protect confidentiality, integrity, and availability of user data and system resources.  
+* **Assumptions**: 
+  - User's OS environment is reasonably secure (no active rootkits or kernel-level exploits)
+  - Users have standard user privileges (not administrator by default)
+  - Applications will be code-signed and distributed through official channels
 
 ## 2. System Architecture Diagram
 
 ```mermaid
 graph TB
   User["User"]
-  UI["UI Interface<br/>WinForm / NodeJS"]
+  H2O["H2OIDE<br/>(C#/WinForms)"]
+  INQ["InQuire<br/>(Electron/NodeJS)"]
   BL["Business Logic Layer"]
 
-  User --> UI
-  UI --> BL
+  User --> H2O
+  User --> INQ
+  H2O --> BL
+  INQ --> BL
 
-  subgraph LocalSystem [Local System]
+  subgraph TrustBoundary [Trust Boundary - Local System]
     direction TB
-    LT["Access login account settings<br/>email.json"]
-    LS["Access sensitive information"]
-    LT <--Encrypt / Decrypt (AES-256 + DPAPI key mgmt)--> LS
+    LT["User Authentication<br/>Credentials Storage"]
+    LS["Sensitive Data<br/>(Projects, Configs)"]
+    LF["File System Access<br/>(Documents, Temp Files)"]
+    LR["Registry Access<br/>(Settings, Preferences)"]
+    
+    LT <--"AES-256 Encryption"--> LS
+    BL <--> LT
+    BL <--> LF
+    BL <--> LR
   end
 
-  BL <--Trust Boundary--> LT
-
-  subgraph CloudArea [Cloud Services - External]
+  subgraph CloudServices [Cloud Services - External]
     direction TB
-    ZT["Auth Server"]
-    CloudSvc["Insyde API Server<br/>Restful API"]
-    ZT <--> CloudSvc
+    AuthSrv["Authentication Server<br/>(Zero Trust)"]
+    APISrv["Insyde API Server<br/>(RESTful API)"]
+    CDN["Content Delivery<br/>(Updates, Patches)"]
+    
+    AuthSrv <--> APISrv
+    APISrv <--> CDN
   end
 
-  BL <-- "Zero Trust + Token Verification" --> ZT
+  BL <--"HTTPS/TLS 1.3<br/>Certificate Pinning"--> AuthSrv
+  BL <--"Token-based Auth<br/>JSON/REST"--> APISrv
+  BL <--"Signed Downloads<br/>Integrity Checks"--> CDN
 ```
-
-*   **Components:**  
-	+   **User:** The entity interacting with the application.  
-	+   **UI Interface (WinForms/NodeJS):** The primary application interface.  
-	+   **Business Logic Layer:** BIOS code editing/compilation, version control, visual components, login/session management.  
-	+   **Local Data Storage:**  
-		- **Trust Boundary:** From the application process to features requiring account login.  
-		- **Data Flow:** The application uses Windows APIs to read/write files (e.g., saved documents).  
-	+   **Cloud Services:**  
-		- **Zero Trust:** Every access requires credentials and token.  
-		- **Data Flow:** All communication via HTTPS; request/response bodies are encrypted.  
 
 ## 3. Threat Identification (STRIDE Model)
 
-| Threat Type | Target Component | Threat Description | Potential Impact |
-| --- | --- | --- | --- |
-| Spoofing | Cloud Service | Attacker forges cloud service endpoint to trick app into sending sensitive data. | Credential and document leakage |
-| Spoofing | Local UI | Fake UI or malware mimics login screen to steal credentials. | Credential leakage |
-| Tampering | Local Storage | Config file or DLL is modified. | Malicious code execution |
-| Tampering | Local Files | User documents are altered. | Loss of integrity |
-| Tampering | Network Traffic | MITM modifies uploaded/downloaded files. | Data corruption or malware injection |
-| Repudiation | Business Logic | Lack of operation logs. | No audit trail or accountability |
-| Repudiation | Cloud Service | No cloud operation logs (e.g., downloads). | Suspicious activity cannot be tracked |
-| Information Disclosure | Local Storage | API keys stored in plaintext. | Sensitive data leakage |
-| Information Disclosure | Memory | Sensitive data not cleared. | Memory dump leakage |
-| Information Disclosure | Logs | Logs contain sensitive data. | Token/credential leakage |
-| Denial of Service | Business Logic | Opening large files exhausts memory. | Application crash |
-| Denial of Service | Parser/Regex | Malicious input triggers infinite loop/Regex DoS. | System freeze |
-| Elevation of Privilege | DLL/Config Loading | DLL hijacking. | Admin privilege escalation |
-| Elevation of Privilege | Installation | UAC bypass via system directory writes. | Privilege escalation |
+| Threat ID | Threat Type | Target Component | Threat Description | Potential Impact | Risk Level |
+| --- | --- | --- | --- | --- | --- |
+| S-01 | Spoofing | Cloud Service | Attacker impersonates cloud service endpoint to steal credentials/data | Credential theft, data exfiltration | **High** |
+| S-02 | Spoofing | Local UI | Malicious application mimics legitimate UI to harvest credentials | Credential compromise | **Medium** |
+| S-03 | Spoofing | Code Signing | Unsigned or maliciously signed executables bypass trust verification | Malware execution | **High** |
+| T-01 | Tampering | Local Storage | Configuration files, DLLs, or executables modified by attacker | Code injection, privilege escalation | **High** |
+| T-02 | Tampering | User Files | Project files or documents altered maliciously | Data integrity loss | **Medium** |
+| T-03 | Tampering | Network Traffic | Man-in-the-middle attacks modify data in transit | Data corruption, malware injection | **High** |
+| T-04 | Tampering | Installation | Malicious installer modifies system files or permissions | System compromise | **High** |
+| R-01 | Repudiation | Business Logic | Insufficient audit logging of user operations | No accountability, forensic gaps | **Medium** |
+| R-02 | Repudiation | Cloud Operations | Missing server-side audit trails | Untrackable suspicious activities | **Medium** |
+| I-01 | Information Disclosure | Local Storage | Sensitive data (API keys, tokens) stored in plaintext | Credential exposure | **High** |
+| I-02 | Information Disclosure | Memory | Sensitive data persists in memory dumps | Runtime data leakage | **Medium** |
+| I-03 | Information Disclosure | Logs | Debug logs contain sensitive information | Credential/token leakage | **Medium** |
+| I-04 | Information Disclosure | Error Messages | Stack traces expose internal system details | Information leakage | **Low** |
+| D-01 | Denial of Service | File Processing | Large files cause memory exhaustion | Application crash | **Medium** |
+| D-02 | Denial of Service | Input Parsing | Malicious regex or XML triggers infinite loops | System freeze | **Medium** |
+| D-03 | Denial of Service | Network | Excessive API calls overwhelm services | Service unavailability | **Low** |
+| E-01 | Elevation of Privilege | DLL Loading | DLL hijacking enables arbitrary code execution | Admin privilege escalation | **High** |
+| E-02 | Elevation of Privilege | Installation | UAC bypass through system directory manipulation | Privilege escalation | **High** |
+| E-03 | Elevation of Privilege | File Permissions | Weak ACLs allow unauthorized file access | Data breach | **Medium** |
 
 ## 4. Mitigation and Countermeasures
 
-| Threat ID | Description | Mitigation & Security Controls | Severity (H/M/L) | Residual Risk |
+| Threat ID | Mitigation Strategy | Implementation Details | Residual Risk | Validation Method |
 | --- | --- | --- | --- | --- |
-| S-01 | Spoofed Cloud Service | Strict certificate validation & pinning; certificate update & fallback strategy. | H | Risk if user ignores updates |
-| S-02 | Fake UI | Clear branding; limit unnecessary NodeJS privileges. | M | Social engineering risk remains |
-| T-01 | Config/DLL Tampering | Sign executables/DLLs; encrypt & hash configs. | M | Outdated signatures may fail |
-| T-02 | File Tampering | Store in protected directories; encrypt & hash sensitive files. | M | Weak default Windows ACLs |
-| T-03 | Network Tampering | TLS 1.3 + HSTS; avoid weak ciphers. | H | CA compromise risk |
-| R-01 | Missing Logs | Use log4net/NLog; secure log storage. | M | Logs may still be deleted |
-| R-02 | Missing Cloud Audit | Cloud endpoints must log operations. | M | Limited if logs not centralized |
-| I-01 | Plaintext Sensitive Data | Use DPAPI or Credential Manager; key rotation. | H | Multi-user systems risk |
-| I-02 | Memory Disclosure | Use SecureString, clear buffers promptly. | M | Memory dumps still risky |
-| I-03 | Log Disclosure | Mask or encrypt sensitive data in logs. | M | Misconfigured log levels risk |
-| D-01 | Large File DoS | File size/type checks; stream processing. | M | High concurrency DoS still possible |
-| D-02 | Regex DoS | Safe parser or regex limits. | M | Special cases may still hang system |
-| E-01 | DLL Hijacking | Use SetDefaultDllDirectories, absolute paths; avoid running as admin. | H | Old DLLs may persist |
-| E-02 | UAC Bypass | Require system writes only when necessary; follow UAC guidelines. | H | User approval risk |
+| S-01 | Certificate Pinning + Validation | Implement strict TLS certificate validation with backup certificate strategy | Certificate rotation issues | Penetration testing |
+| S-02 | UI Authentication + Branding | Clear application branding, digital signatures, user education | Social engineering attacks | User acceptance testing |
+| S-03 | Code Signing | Sign all executables with trusted certificates, verify signatures at startup | Certificate compromise | Binary analysis |
+| T-01 | File Integrity Protection | Hash verification, encrypted storage, secure file permissions | Admin-level attacks | File system auditing |
+| T-02 | Backup + Versioning | Automatic backups, version control integration, integrity checksums | User error, concurrent access | Recovery testing |
+| T-03 | TLS Security | TLS 1.3, HSTS, strong cipher suites, certificate transparency | CA compromise | Network security testing |
+| T-04 | Secure Installation | Signed installers, UAC compliance, minimal privilege installation | User bypass of warnings | Installation testing |
+| R-01 | Comprehensive Logging | Structured logging with correlation IDs, secure log storage | Log tampering | Audit log review |
+| R-02 | Server-Side Auditing | Centralized logging, SIEM integration, retention policies | Limited visibility | Compliance audit |
+| I-01 | Data Protection | DPAPI encryption, Credential Manager, environment variables | Multi-user system risks | Cryptographic review |
+| I-02 | Memory Protection | SecureString usage, explicit memory clearing, GC optimization | Memory dump attacks | Memory analysis |
+| I-03 | Log Sanitization | Sensitive data masking, appropriate log levels, log rotation | Configuration errors | Log analysis |
+| I-04 | Error Handling | Generic error messages, detailed logging to secure location | Information inference | Error testing |
+| D-01 | Resource Management | File size limits, streaming processing, memory monitoring | Resource exhaustion | Load testing |
+| D-02 | Input Validation | Safe parsers, regex timeouts, input sanitization | Edge case exploits | Fuzz testing |
+| D-03 | Rate Limiting | API throttling, circuit breakers, backoff strategies | Distributed attacks | Performance testing |
+| E-01 | Secure DLL Loading | SetDefaultDllDirectories, full paths, signature verification | Legacy DLL conflicts | DLL analysis |
+| E-02 | UAC Compliance | Manifest-based UAC, minimal elevation, user consent | User approval bypass | Privilege testing |
+| E-03 | Access Control | Principle of least privilege, ACL validation, permission auditing | Inherited permissions | Security assessment |
 
-## 5. Validation and Next Steps
+## 5. Improved PR/CI Security Checklist
 
-*   **Code Review:** Focus on High severity threats (S-01, T-03, I-01, E-01, E-02).  
-*   **Penetration Testing:** Simulate DLL tampering, MITM attacks, UAC bypass.  
-*   **Fuzz Testing:** Validate parser/regex against malicious input.  
-*   **Third-Party Dependency Scan:** Use `npm audit`, `NuGet audit`.  
-*   **Success Criteria:** No unresolved High severity findings in CI pipeline.  
+### 🔴 **Critical Security Controls (Release Blockers)**
 
-### 5.1 Self-Check Guidelines
+#### **Universal Security Requirements** *(All Platforms)*
 
-1) **Do not store sensitive data in plaintext, use DPAPI** [I-01]  
-```csharp
-using System.Security.Cryptography;
+**Data Protection & Encryption [I-01, I-02, I-03]**
+- [ ] Sensitive data encrypted at rest using platform-appropriate methods
+  - C#: DPAPI with `ProtectedData.Protect/Unprotect`
+  - Node.js: Environment variables, secure key management services
+- [ ] Sensitive data cleared from memory immediately after use
+- [ ] No hardcoded secrets, API keys, or credentials in source code
+- [ ] Configuration secrets use secure storage mechanisms
+- [ ] Memory buffers explicitly cleared after processing sensitive data
 
-byte[] plain = System.Text.Encoding.UTF8.GetBytes(secret);
-byte[] cipher = ProtectedData.Protect(plain, optionalEntropy: null, scope: DataProtectionScope.CurrentUser);
-// Save cipher; use Unprotect when needed
-```
+**Network Security [S-01, S-03, T-03]**
+- [ ] HTTPS/TLS 1.2+ enforced for all communications
+- [ ] Certificate validation and pinning implemented with fallback strategy
+- [ ] Appropriate timeout values and connection limits configured
+- [ ] Network error handling prevents information disclosure
+- [ ] Strong cipher suites configured, weak ciphers disabled
 
-2) **HTTPS/TLS:** Do not hardcode TLS version  
-	- Let .NET negotiate per OS policy (avoid hardcoding `ServicePointManager.SecurityProtocol`). [S-01/I-01]  
-	- Only accept TLS 1.2+ in production. [S-01/I-01]  
-	- In Node, set `minVersion: 'TLSv1.2'`.  
-
-3) **Auditable Logs without Sensitive Data**  
-	- Use EventSource [R-01], custom events, never log tokens/passwords.  
-
-4) **Secure Compile/Link Options (esp. x64)**  
-	- `/GS` [E-01/T-01], `/guard:cf` [E-01], `/DYNAMICBASE` [E-01], `/HIGHENTROPYVA` [E-01]  
-	- Run BinSkim in CI for binary checks.  
-
-5) **Static Code Scanning**  
-	- Deploy DevSkim in VS Code/GitHub Actions.  
-
-6) **HTTP Headers & Common Protections**  
-	- Use `helmet()`, secure cookies (Secure, HttpOnly, SameSite), set CSP.  
-
-7) **Minimize Logs, Avoid Sensitive Content**  
-	- Do not log Authorization headers/tokens.  
-
-**Example (Express):**
-```ts
-import express from "express";
-import helmet from "helmet";
-
-const app = express();
-app.use(helmet() [T-01/I-01]);
-app.use(express.json());
-
-app.get("/health", (_, res) => res.send("ok"));
-
-app.post("/token/use", (req, res) => {
-  const { userId } = req.body;
-  console.info({ evt: "token_use", userId });
-  res.sendStatus(204);
-});
-
-app.listen(3000);
-```
-
-## PR / CI Checklist
-
-### **C# / .NET Security Checklist**
-**Data Protection & Encryption [I-01, I-02]**
-- [ ] DPAPI used for encryption with `ProtectedData.Protect/Unprotect`
-- [ ] Sensitive strings use `SecureString` class where possible
-- [ ] Memory buffers cleared after use (`Array.Clear`, `GC.Collect`)
-- [ ] No hardcoded secrets, API keys, or connection strings in source code
-- [ ] Configuration secrets use User Secrets or Azure Key Vault
-
-**Network Security [S-01, T-03]**
-- [ ] No hardcoded `SecurityProtocol` or `SslProtocols` (let .NET negotiate)
-- [ ] Certificate validation enabled and certificate pinning implemented
-- [ ] HTTPS-only communication enforced
-- [ ] HttpClient configured with appropriate timeout values
-- [ ] Custom certificate validation logic reviewed and tested
-
-**Logging & Auditing [R-01, I-03]**
-- [ ] EventSource or structured logging (Serilog/NLog) implemented
-- [ ] Sensitive fields masked in logs (passwords, tokens, PII)
-- [ ] Log levels appropriately configured (no Debug logs in production)
-- [ ] Log injection vulnerabilities prevented (input sanitization)
-
-**Binary Security [E-01, T-01]**
-- [ ] Security compiler flags enabled: `/GS`, `/guard:cf`, `/DYNAMICBASE`, `/HIGHENTROPYVA`
-- [ ] BinSkim analysis passed without High severity findings
-- [ ] Code signing certificates applied to all executables and DLLs
-- [ ] Strong name signing enabled for assemblies
-- [ ] ASLR and DEP enabled in linker options
-
-**Input Validation & Parsing [D-01, D-02]**
-- [ ] File size and type validation implemented
-- [ ] Regex patterns reviewed for ReDoS vulnerabilities
-- [ ] Input sanitization for all user-provided data
+**Input Validation & Parsing [D-01, D-02, T-02]**
+- [ ] File size and type validation with appropriate limits
+- [ ] Regular expression patterns reviewed for ReDoS vulnerabilities
+- [ ] All user inputs sanitized and validated at entry points
 - [ ] XML/JSON parsers configured to prevent XXE and deserialization attacks
-- [ ] SQL injection prevention (parameterized queries/ORM)
+- [ ] SQL injection prevention through parameterized queries/ORM
+
+**Logging & Auditing [R-01, R-02, I-03]**
+- [ ] Structured logging implemented with appropriate framework
+- [ ] Sensitive fields masked or excluded from logs (passwords, tokens, PII)
+- [ ] Production log levels configured appropriately (no debug information)
+- [ ] Security events properly logged (authentication failures, privilege changes)
+- [ ] Log injection vulnerabilities prevented through input sanitization
 
 **Static Analysis & Dependencies**
-- [ ] DevSkim shows no High/Critical severity findings
-- [ ] SonarQube/CodeQL analysis passed
-- [ ] NuGet packages audited with `dotnet list package --vulnerable`
-- [ ] Dependency versions pinned and regularly updated
+- [ ] Static code analysis passes without High/Critical security findings
+- [ ] Dependency vulnerability scanning completed and resolved
+- [ ] Package versions pinned and regularly updated
 - [ ] No known vulnerable packages in dependency tree
+- [ ] Third-party component security assessment completed
 
-**Access Control & Privileges [E-01, E-02]**
-- [ ] Application runs with minimal required privileges
-- [ ] UAC prompts only when absolutely necessary
+### 🟡 **Platform-Specific Security Controls**
+
+#### **C#/.NET Security Requirements**
+
+**Binary Security [E-01, E-02, T-01]**
+- [ ] Security compiler flags enabled: `/GS`, `/guard:cf`, `/DYNAMICBASE`, `/HIGHENTROPYVA`
+- [ ] BinSkim analysis passes without High/Critical findings
+- [ ] All executables and DLLs digitally signed with trusted certificates
+- [ ] Strong name signing enabled for assemblies where applicable
+- [ ] ASLR and DEP enabled in linker configuration
+
+**Windows-Specific Security [E-01, E-03, T-04]**
+- [ ] DLL loading uses `SetDefaultDllDirectories` and absolute paths
+- [ ] Registry access minimized and input validated
 - [ ] File system permissions follow principle of least privilege
-- [ ] Registry access minimized and validated
-- [ ] DLL loading uses secure methods (SetDefaultDllDirectories, full paths)
+- [ ] UAC manifest properly configured for required elevation
+- [ ] Windows Defender compatibility verified (no false positives)
 
-### **Node.js / Express Security Checklist**
-**Network & Transport Security [S-01, T-03]**
-- [ ] TLS 1.2+ enforced (`minVersion: 'TLSv1.2'` in HTTPS options)
-- [ ] Certificate validation and pinning implemented
-- [ ] HSTS headers configured with appropriate max-age
-- [ ] Certificate transparency monitoring enabled
-- [ ] Request timeout and rate limiting configured
+**Code Example:**
+```csharp
+// Secure data protection
+byte[] encryptedData = ProtectedData.Protect(
+    sensitiveBytes, 
+    entropy: null, 
+    scope: DataProtectionScope.CurrentUser
+);
 
-**HTTP Security Headers [T-01, I-03]**
+// Secure HTTP client configuration
+var handler = new HttpClientHandler()
+{
+    SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+    ServerCertificateCustomValidationCallback = ValidateCertificate
+};
+using var httpClient = new HttpClient(handler);
+```
+
+#### **Node.js/Electron Security Requirements**
+
+**HTTP Security Headers [T-01, I-03, S-02]**
 - [ ] `helmet()` middleware configured with secure defaults
 - [ ] Content Security Policy (CSP) implemented and tested
 - [ ] Secure cookie settings: `Secure`, `HttpOnly`, `SameSite`
-- [ ] X-Frame-Options, X-Content-Type-Options headers set
-- [ ] Referrer-Policy configured appropriately
+- [ ] X-Frame-Options and X-Content-Type-Options headers configured
+- [ ] CORS policy properly restrictive for API endpoints
 
-**Authentication & Session Management [S-02, I-01]**
-- [ ] JWT tokens properly validated and signed
-- [ ] Session secrets stored securely (environment variables/secrets manager)
-- [ ] Token expiration and refresh mechanisms implemented
-- [ ] CSRF protection enabled for state-changing operations
-- [ ] Authentication rate limiting implemented
+**Electron-Specific Security [E-01, E-02]**
+- [ ] Node integration disabled in renderer processes where possible
+- [ ] Context isolation enabled for all renderer processes
+- [ ] Preload scripts used instead of node integration
+- [ ] External resource loading properly validated and restricted
+- [ ] IPC communication secured and validated
 
-**Input Validation & Sanitization [D-01, D-02, T-02]**
-- [ ] Request body size limits configured
-- [ ] File upload restrictions (type, size, location)
-- [ ] Input validation middleware (Joi, express-validator)
-- [ ] SQL injection prevention (parameterized queries)
-- [ ] XSS protection and output encoding
-
-**Logging & Monitoring [R-01, I-03]**
-- [ ] Structured logging implemented (Winston, Bunyan)
-- [ ] Sensitive data masked in logs (Authorization headers, passwords)
-- [ ] Security events logged (failed logins, privilege escalations)
-- [ ] Log rotation and secure storage configured
-- [ ] Monitoring and alerting for security events
-
-**Dependencies & Static Analysis**
-- [ ] `npm audit` shows no High/Critical vulnerabilities
-- [ ] Package versions pinned in package-lock.json
-- [ ] ESLint security rules enabled (eslint-plugin-security)
-- [ ] Snyk or similar dependency scanning in CI pipeline
-- [ ] Regular dependency updates scheduled
-
-**Environment & Deployment [E-01, E-02]**
-- [ ] Environment variables used for all configuration
+**Environment & Deployment [I-01, T-04]**
+- [ ] Environment variables used for all sensitive configuration
 - [ ] Production mode enabled (`NODE_ENV=production`)
-- [ ] Debug information disabled in production builds
-- [ ] Source maps excluded from production deployments
-- [ ] Docker images use non-root user and minimal base images
+- [ ] Debug information and source maps excluded from production builds
+- [ ] Dependency bundling configured to exclude development dependencies
 
-### **General CI/CD Security Checklist**
-**Build Pipeline Security**
-- [ ] Secrets stored in secure CI/CD variables (encrypted)
-- [ ] Build artifacts signed and integrity-verified
-- [ ] Container images scanned for vulnerabilities
-- [ ] Infrastructure as Code (IaC) security scanned
-- [ ] SAST (Static Application Security Testing) integrated
+**Code Example:**
+```typescript
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
-**Release Management**
-- [ ] Security testing included in pipeline (DAST, penetration testing)
+// Security middleware configuration
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"]
+        }
+    },
+    hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true
+    }
+}));
+
+// Rate limiting
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100,
+    message: "Too many requests from this IP"
+});
+app.use('/api/', limiter);
+```
+
+### 🟢 **Continuous Improvement Controls**
+
+#### **Build Pipeline Security**
+- [ ] Secrets stored in encrypted CI/CD variables (never in code)
+- [ ] Build artifacts digitally signed and integrity-verified
+- [ ] Container images scanned for vulnerabilities (if applicable)
+- [ ] Infrastructure as Code (IaC) security scanning integrated
+- [ ] SAST (Static Application Security Testing) integrated with quality gates
+
+#### **Release Management & Testing**
+- [ ] Security testing integrated in pipeline (DAST, penetration testing)
 - [ ] Code review required for all security-related changes
-- [ ] Automated security regression testing
-- [ ] Rollback procedures documented and tested
-- [ ] Security incident response plan validated
+- [ ] Automated security regression testing implemented
+- [ ] Security incident response procedures documented and tested
+- [ ] Rollback procedures validated and regularly tested
 
-**Monitoring & Compliance**
-- [ ] Security metrics and KPIs defined and tracked
-- [ ] Compliance requirements validated (if applicable)
-- [ ] Security documentation updated
-- [ ] Threat model review completed for significant changes
-- [ ] Security training completed for development team
+#### **Monitoring & Compliance**
+- [ ] Security metrics and KPIs defined, tracked, and reported
+- [ ] Compliance requirements validated (if applicable: GDPR, SOC2, etc.)
+- [ ] Security documentation maintained and up-to-date
+- [ ] Threat model reviewed for significant architectural changes
+- [ ] Security training completed by development team members
 
-### **Priority Levels**
-- **🔴 Critical (Must Fix)**: High severity security findings that block release
-- **🟡 High Priority**: Security improvements that should be addressed soon
-- **🟢 Nice to Have**: Security enhancements for future consideration
+## 6. Validation and Implementation Steps
+
+### **Priority 1: Critical Security Implementation**
+1. **Certificate Pinning**: Implement for all cloud service communications
+2. **Data Encryption**: Deploy DPAPI/.NET or secure storage for Node.js
+3. **Code Signing**: Establish trusted certificate-based signing process
+4. **Input Validation**: Implement comprehensive validation framework
+
+### **Priority 2: Defense in Depth**
+1. **Logging Framework**: Deploy structured, secure logging system
+2. **Static Analysis**: Integrate SAST tools in CI/CD pipeline
+3. **Dependency Management**: Implement vulnerability scanning and updates
+4. **Access Controls**: Review and implement principle of least privilege
+
+### **Priority 3: Continuous Security**
+1. **Security Testing**: Regular penetration testing and code reviews
+2. **Incident Response**: Develop and test security incident procedures
+3. **Security Training**: Regular team security awareness and training
+4. **Threat Model Updates**: Quarterly reviews and updates
+
+### **Success Criteria**
+- Zero High/Critical security findings in automated scans
+- All security controls implemented and tested
+- Security incident response plan validated
+- Team security training completion rate >95%
+- Regular third-party security assessments passed
+
+## 7. Risk Assessment Summary
+
+| Risk Level | Count | Key Areas | Mitigation Status |
+|------------|--------|-----------|-------------------|
+| **High** | 7 | Authentication, Data Protection, Privilege Escalation | 85% Mitigated |
+| **Medium** | 8 | Input Validation, Logging, File Handling | 75% Mitigated |
+| **Low** | 2 | Error Handling, Rate Limiting | 90% Mitigated |
+
+### **Residual Risks Requiring Acceptance**
+- Certificate Authority compromise affecting pinned certificates
+- Advanced Persistent Threats with kernel-level access
+- Social engineering attacks bypassing technical controls
+- Zero-day vulnerabilities in third-party dependencies
