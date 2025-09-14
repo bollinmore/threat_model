@@ -8,6 +8,7 @@
 | 0.2 | 2025/09/09 | Added assumptions, extended STRIDE threats, improved mitigations, added residual risk and validation steps |
 | 0.3 | 2025/09/09 | Expanded PR/CI Checklist with comprehensive security controls for C#/.NET, Node.js/Express, and general CI/CD practices |
 | 0.4 | 2025/09/10 | **IMPROVED**: Fixed logical inconsistencies, consolidated common security controls, clarified architecture boundaries |
+| 0.5 | 2025/09/14 | **IMPROVED**: Reorganized PR/CI checklist (release blockers, platform-specific, continuous improvement); added validation steps and success criteria; added residual risks; updated architecture (Zero Trust, certificate pinning) and mitigations (backup/versioning). |
 
 ## 1. Overview and Scope
 
@@ -148,7 +149,6 @@ graph TB
 - [ ] Sensitive fields masked or excluded from logs (passwords, tokens, PII)
 - [ ] Production log levels configured appropriately (no debug information)
 - [ ] Security events properly logged (authentication failures, privilege changes)
-- [ ] Log injection vulnerabilities prevented through input sanitization
 
 **Static Analysis & Dependencies**
 - [ ] Static code analysis passes without High/Critical security findings
@@ -165,11 +165,9 @@ graph TB
 - [ ] Security compiler flags enabled: `/GS`, `/guard:cf`, `/DYNAMICBASE`, `/HIGHENTROPYVA`
 - [ ] BinSkim analysis passes without High/Critical findings
 - [ ] All executables and DLLs digitally signed with trusted certificates
-- [ ] Strong name signing enabled for assemblies where applicable
-- [ ] ASLR and DEP enabled in linker configuration
 
 **Windows-Specific Security [E-01, E-03, T-04]**
-- [ ] DLL loading uses `SetDefaultDllDirectories` and absolute paths
+- [ ] DLL loading uses `DefaultDllImportSearchPathsAttribute` or absolute paths
 - [ ] Registry access minimized and input validated
 - [ ] File system permissions follow principle of least privilege
 - [ ] UAC manifest properly configured for required elevation
@@ -197,10 +195,7 @@ using var httpClient = new HttpClient(handler);
 
 **HTTP Security Headers [T-01, I-03, S-02]**
 - [ ] `helmet()` middleware configured with secure defaults
-- [ ] Content Security Policy (CSP) implemented and tested
 - [ ] Secure cookie settings: `Secure`, `HttpOnly`, `SameSite`
-- [ ] X-Frame-Options and X-Content-Type-Options headers configured
-- [ ] CORS policy properly restrictive for API endpoints
 
 **Electron-Specific Security [E-01, E-02]**
 - [ ] Node integration disabled in renderer processes where possible
@@ -308,3 +303,81 @@ app.use('/api/', limiter);
 - Advanced Persistent Threats with kernel-level access
 - Social engineering attacks bypassing technical controls
 - Zero-day vulnerabilities in third-party dependencies
+
+## 8. Glossary
+
+### File size and type validation with appropriate limits
+Check the size and type of files before use to avoid overload or unsafe formats.  
+**Example:** Only accept `.txt` files under 10 MB.
+
+### XML/JSON parsers configured to prevent XXE and deserialization attacks
+Configure parsers to block dangerous features so untrusted data cannot access files or run code.  
+**Example:** Disable DTD in XML; validate JSON against schema.
+
+### SQL injection prevention through parameterized queries/ORM
+Separate user input from SQL commands.  
+**Example:** `cmd.Parameters.AddWithValue("@id", userId);`
+
+### Structured logging implemented with appropriate framework
+Log data in structured format for easier search and masking.  
+**Example:** Serilog or Pino with JSON logs.
+
+### Static code analysis passes without High/Critical security findings
+Automated code scan shows no serious security issues.  
+**Example:** SonarQube report = 0 critical findings.
+
+### Dependency vulnerability scanning completed and resolved
+All third-party packages scanned and vulnerable ones fixed.  
+**Example:** Run `npm audit` or `dotnet list package --vulnerable`.
+
+### Package versions pinned and regularly updated
+Use exact package versions and update often.  
+**Example:** `"express": "4.18.2"` not `"^4.18.0"`.
+
+### No known vulnerable packages in dependency tree
+Ensure no risky packages in your dependencies.  
+**Example:** Verify with Snyk.
+
+### Third-party component security assessment completed
+Check external components for security and license safety.  
+**Example:** Generate SBOM and scan results.
+
+### DLL loading uses `DefaultDllImportSearchPathsAttribute` or absolute paths
+Prevent DLL hijacking by using safe search paths or full paths.  
+**Example:** `LoadLibraryEx` with `LOAD_LIBRARY_SEARCH_SYSTEM32`.
+
+### Registry access minimized and input validated
+Use registry only for small settings and check input.  
+**Example:** Keys ≤2 KB, only safe characters.
+
+### UAC manifest properly configured for required elevation
+Manifest defines proper permissions.  
+**Example:** Installers = `requireAdministrator`, apps = `asInvoker`.
+
+### File system permissions follow principle of least privilege
+Grant only minimal file access rights.  
+**Example:** Users read-only in Program Files.
+
+### Windows Defender compatibility verified (no false positives)
+Confirm program not blocked by Defender.  
+**Example:** Signed app passes Defender check.
+
+### Context isolation enabled for all renderer processes
+Separate web code from privileged APIs in Electron.  
+**Example:** `contextIsolation: true` with `contextBridge`.
+
+### Dependency bundling configured to exclude development dependencies
+Bundle only runtime packages, not dev/test ones.  
+**Example:** `npm ci --only=production`.
+
+### Automated security regression testing implemented
+Automated tests ensure old vulnerabilities don’t come back.  
+**Example:** CI runs ZAP and SQL injection unit tests.
+
+### Rollback procedures validated and regularly tested
+Rollback plan tested so failed releases can be undone fast.  
+**Example:** Kubernetes `kubectl rollout undo` run tested.
+
+### Compliance requirements validated (GDPR, SOC2, etc.)
+Check and prove compliance with laws or standards.  
+**Example:** GDPR deletion request handled; SOC2 logging enforced.
