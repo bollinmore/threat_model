@@ -5,10 +5,8 @@
 | Revision | Date | Description |
 | --- | --- | --- |
 | 0.1 | 2025/09/08 | Initial version |
-| 0.2 | 2025/09/09 | Added assumptions, extended STRIDE threats, improved mitigations, added residual risk and validation steps |
-| 0.3 | 2025/09/09 | Expanded PR/CI Checklist with comprehensive security controls for C#/.NET, Node.js/Express, and general CI/CD practices |
-| 0.4 | 2025/09/10 | **IMPROVED**: Fixed logical inconsistencies, consolidated common security controls, clarified architecture boundaries |
-| 0.5 | 2025/09/14 | **IMPROVED**: Reorganized PR/CI checklist (release blockers, platform-specific, continuous improvement); added validation steps and success criteria; added residual risks; updated architecture (Zero Trust, certificate pinning) and mitigations (backup/versioning). |
+
+<div style="page-break-after: always;"></div>
 
 ## 1. Overview and Scope
 
@@ -30,8 +28,8 @@
 ```mermaid
 graph TB
   User["User"]
-  H2O["H2OIDE<br/>(C#/WinForms)"]
-  INQ["InQuire<br/>(Electron/NodeJS)"]
+  H2O["H2OIDE<br/>C#/WinForms"]
+  INQ["InQuire<br/>Electron/NodeJS"]
   BL["Business Logic Layer"]
 
   User --> H2O
@@ -42,9 +40,9 @@ graph TB
   subgraph TrustBoundary [Trust Boundary - Local System]
     direction TB
     LT["User Authentication<br/>Credentials Storage"]
-    LS["Sensitive Data<br/>(Projects, Configs)"]
-    LF["File System Access<br/>(Documents, Temp Files)"]
-    LR["Registry Access<br/>(Settings, Preferences)"]
+    LS["Sensitive Data<br/>Projects, Configs"]
+    LF["File System Access<br/>Documents, Temp Files"]
+    LR["Registry Access<br/>Settings, Preferences"]
     
     LT <--"AES-256 Encryption"--> LS
     BL <--> LT
@@ -54,18 +52,21 @@ graph TB
 
   subgraph CloudServices [Cloud Services - External]
     direction TB
-    AuthSrv["Authentication Server<br/>(Zero Trust)"]
-    APISrv["Insyde API Server<br/>(RESTful API)"]
-    CDN["Content Delivery<br/>(Updates, Patches)"]
+    AuthSrv["Authentication Server<br/>Zero Trust"]
+    APISrv["Insyde API Server<br/>RESTful API"]
+    CDN["Content Delivery<br/>Updates, Patches"]
     
     AuthSrv <--> APISrv
     APISrv <--> CDN
   end
 
-  BL <--"HTTPS/TLS 1.3<br/>Certificate Pinning"--> AuthSrv
-  BL <--"Token-based Auth<br/>JSON/REST"--> APISrv
-  BL <--"Signed Downloads<br/>Integrity Checks"--> CDN
+  BL <--"HTTPS/TLS 1.3\nCertificate Pinning"--> AuthSrv
+  BL <--"Token-based Auth\nJSON/REST"--> APISrv
+  BL <--"Signed Downloads\nIntegrity Checks"--> CDN
 ```
+
+<div style="page-break-after: always;"></div>
+
 
 ## 3. Threat Identification (STRIDE Model)
 
@@ -91,6 +92,8 @@ graph TB
 | E-02 | Elevation of Privilege | Installation | UAC bypass through system directory manipulation | Privilege escalation | **High** |
 | E-03 | Elevation of Privilege | File Permissions | Weak ACLs allow unauthorized file access | Data breach | **Medium** |
 
+<div style="page-break-after: always;"></div>
+
 ## 4. Mitigation and Countermeasures
 
 | Threat ID | Mitigation Strategy | Implementation Details | Residual Risk | Validation Method |
@@ -115,9 +118,11 @@ graph TB
 | E-02 | UAC Compliance | Manifest-based UAC, minimal elevation, user consent | User approval bypass | Privilege testing |
 | E-03 | Access Control | Principle of least privilege, ACL validation, permission auditing | Inherited permissions | Security assessment |
 
+<div style="page-break-after: always;"></div>
+
 ## 5. Improved PR/CI Security Checklist
 
-### 🔴 **Critical Security Controls (Release Blockers)**
+### **Critical Security Controls (Release Blockers)**
 
 #### **Universal Security Requirements** *(All Platforms)*
 
@@ -157,7 +162,7 @@ graph TB
 - [ ] No known vulnerable packages in dependency tree
 - [ ] Third-party component security assessment completed
 
-### 🟡 **Platform-Specific Security Controls**
+### **Platform-Specific Security Controls**
 
 #### **C#/.NET Security Requirements**
 
@@ -240,7 +245,7 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 ```
 
-### 🟢 **Continuous Improvement Controls**
+### **Continuous Improvement Controls**
 
 #### **Build Pipeline Security**
 - [ ] Secrets stored in encrypted CI/CD variables (never in code)
@@ -262,6 +267,8 @@ app.use('/api/', limiter);
 - [ ] Security documentation maintained and up-to-date
 - [ ] Threat model reviewed for significant architectural changes
 - [ ] Security training completed by development team members
+
+<div style="page-break-after: always;"></div>
 
 ## 6. Validation and Implementation Steps
 
@@ -290,6 +297,8 @@ app.use('/api/', limiter);
 - Team security training completion rate >95%
 - Regular third-party security assessments passed
 
+<div style="page-break-after: always;"></div>
+
 ## 7. Risk Assessment Summary
 
 | Risk Level | Count | Key Areas | Mitigation Status |
@@ -303,6 +312,8 @@ app.use('/api/', limiter);
 - Advanced Persistent Threats with kernel-level access
 - Social engineering attacks bypassing technical controls
 - Zero-day vulnerabilities in third-party dependencies
+
+<div style="page-break-after: always;"></div>
 
 ## 8. Glossary
 
